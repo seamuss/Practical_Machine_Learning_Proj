@@ -1,0 +1,98 @@
+---
+title: "Practical Machine Learning - Course Project"
+output: html_document
+author: "Seamus Sands"
+---
+
+```{r, echo=FALSE}
+message(sprintf("Run time: %s\nR version: %s", Sys.time(), R.Version()$version.string))
+```
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The goal of this analysis is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, who were asked to perform barbell lifts correctly and incorrectly in 5 different ways, to predict the manner in which the particpant did the exercise. This exercise manner is indicated by the `classe` variable 
+
+### Data Cleansing and preprocessing
+
+I have read in the data provided into R below, with all empty fields being replaced with `NA` values.
+
+```{r}
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+Next step is to inspect the data, where i found over half the columns contained only `NA` values, these `NA` values are of no use in training or testing a model, so i have removed these columns. 
+
+The first seven columns of the remaining data sets contain information on the user and the time the exercise took place, which again are irrelevant, as I only require the accelerometer readings to use for predictions. 
+
+```{r}
+training <- training[, colSums(is.na(training)) == 0] 
+training <- training[ , -(1:7)]
+
+testing <- testing[, colSums(is.na(testing)) == 0] 
+testing <- testing[ , -(1:7)]
+```
+
+This leaves us with a training data set with 19622 rows and 53 columns (52 accelerometer readings and the `classe` variable), and a testing data set with 20 rows and 53 columns. 
+
+### Cross Validation
+
+To make use of cross validation, we split the training set on the `classe` variable. 
+
+```{r}
+library(caret)
+inTrain <- createDataPartition(y = training$classe, p = 0.7, list = F)
+trainSet <- training[inTrain,]
+testSet <- training[-inTrain,]
+```
+
+### Model Building
+
+Using the `trainSet`, we build a model using the Random Forests method. 
+
+```{r}
+control <- trainControl(method = "cv", 5)
+model <- train(classe ~ ., method = "rf", data = trainSet, trControl = control, ntree = 200)
+model
+```
+
+We can then make predictions on the validation set, and create a confusion matrix to test the accuracy of the model. 
+
+```{r}
+predictions <- predict(model, testSet)
+confusionMatrix(testSet$classe, predictions)
+```
+
+I can now calculate the out of sample error, using this confusion matrix.
+
+```{r}
+CMTable <- table(testSet$classe, predictions)
+outOfSampleError <- 1 - (sum(diag(CMTable))/ length(predictions))
+outOfSampleError
+```
+
+I am satisfied with the accuracy that the random forests model provides, as shown in the `Confusion Matrix and Statistics`, and so use this model to predict the `classe` variable on the initial test set.
+
+```{r}
+predictions_output <- predict(model, testing)
+predictions_output
+```
+
+### Programming Submission for Coursera
+
+Below is the code that allows the predictions output from my model to be separated out into separate text files to be used as part of the submission to coursera.
+
+```{r}
+write_files = function(x) {
+     n = length(x)
+     for(i in 1:n) {
+         filename = paste0("problem_id_", i, ".txt")
+         write.table(x[i], file=filename, quote=FALSE, row.names=FALSE, col.names=FALSE)
+     }
+ }
+
+write_files(predictions_output)
+```
+
